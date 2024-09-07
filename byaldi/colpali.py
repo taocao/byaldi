@@ -1,30 +1,20 @@
 import os
 import shutil
-
 from importlib.metadata import version
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
 import srsly
 import torch
-from colpali_engine.models.paligemma_colbert_architecture import ColPali
-from colpali_engine.trainer.retrieval_evaluator import CustomEvaluator
-from colpali_engine.utils.colpali_processing_utils import (
-    process_images,
-    process_queries,
-)
+from colpali_engine.evaluation import CustomRetrievalEvaluator
+from colpali_engine.models import ColPali, ColPaliProcessor
 from pdf2image import convert_from_path
 from PIL import Image
-from transformers import AutoProcessor
 
 from byaldi.objects import Result
 
-from .utils import capture_print
-
 # Import version directly from the package metadata
 VERSION = version("Byaldi")
-
-MOCK_IMAGE = Image.new("RGB", (448, 448), (255, 255, 255))
 
 
 class ColPaliModel:
@@ -77,10 +67,12 @@ class ColPaliModel:
             token=kwargs.get("hf_token", None) or os.environ.get("HF_TOKEN"),
         )
         self.model = self.model.eval()
-        self.processor = AutoProcessor.from_pretrained(
+
+        self.processor = ColPaliProcessor.from_pretrained(
             self.pretrained_model_name_or_path,
             token=kwargs.get("hf_token", None) or os.environ.get("HF_TOKEN"),
         )
+
         self.device = device
         if device != "cuda" and not (isinstance(device, torch.device) and device.type == "cuda"):
             self.model = self.model.to(device)
@@ -392,7 +384,7 @@ class ColPaliModel:
         if any(entry["doc_id"] == doc_id and entry["page_id"] == page_id for entry in self.embed_id_to_doc_id.values()):
             raise ValueError(f"Document ID {doc_id} with page ID {page_id} already exists in the index")
 
-        processed_image = process_images(self.processor, [image])
+        processed_image = self.processor.process_images([image])
 
         # Generate embedding
         with torch.no_grad():
@@ -427,9 +419,8 @@ class ColPaliModel:
     def remove_from_index(self):
         raise NotImplementedError("This method is not implemented yet.")
 
-    @capture_print
     def _score(self, qs: torch.Tensor):
-        retriever_evaluator = CustomEvaluator(is_multi_vector=True)
+        retriever_evaluator = CustomRetrievalEvaluator(is_multi_vector=True)
         scores = retriever_evaluator.evaluate(qs, self.indexed_embeddings)
         return scores
 
@@ -456,7 +447,7 @@ class ColPaliModel:
         for q in queries:
             # Process query
             with torch.no_grad():
-                batch_query = process_queries(self.processor, [q], MOCK_IMAGE)
+                batch_query = self.processor.process_queries([q])
                 batch_query = {k: v.to(self.device) for k, v in batch_query.items()}
                 embeddings_query = self.model(**batch_query)
             qs = list(torch.unbind(embeddings_query.to("cpu")))
@@ -521,7 +512,7 @@ class ColPaliModel:
                 raise ValueError(f"Unsupported input type: {type(item)}")
 
         with torch.no_grad():
-            batch = process_images(self.processor, images)
+            batch = self.processor.process_images(images)
             batch = {k: v.to(self.device) for k, v in batch.items()}
             embeddings = self.model(**batch)
 
@@ -542,7 +533,7 @@ class ColPaliModel:
             query = [query]
 
         with torch.no_grad():
-            batch = process_queries(self.processor, query, MOCK_IMAGE)
+            batch = self.processor.process_queries(query)
             batch = {k: v.to(self.device) for k, v in batch.items()}
             embeddings = self.model(**batch)
 
