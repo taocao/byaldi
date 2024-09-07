@@ -1,26 +1,28 @@
 import os
+import shutil
+
+from importlib.metadata import version
+from pathlib import Path
+from typing import Dict, List, Optional, Union
+
 import srsly
 import torch
-import shutil
-from typing import Optional, Union, List, Dict
-from pathlib import Path
-from PIL import Image
-from pdf2image import convert_from_path
-from torch.utils.data import DataLoader
-from tqdm import tqdm
-from transformers import AutoProcessor
 from colpali_engine.models.paligemma_colbert_architecture import ColPali
 from colpali_engine.trainer.retrieval_evaluator import CustomEvaluator
 from colpali_engine.utils.colpali_processing_utils import (
     process_images,
     process_queries,
 )
-from byaldi.objects import Result
-from .utils import capture_print
-# Import version directly from the package metadata
-from importlib.metadata import version
-VERSION = version("Byaldi")
+from pdf2image import convert_from_path
+from PIL import Image
+from transformers import AutoProcessor
 
+from byaldi.objects import Result
+
+from .utils import capture_print
+
+# Import version directly from the package metadata
+VERSION = version("Byaldi")
 
 MOCK_IMAGE = Image.new("RGB", (448, 448), (255, 255, 255))
 
@@ -48,7 +50,9 @@ class ColPaliModel:
         self.pretrained_model_name_or_path = pretrained_model_name_or_path
         self.model_name = self.pretrained_model_name_or_path
         self.n_gpu = torch.cuda.device_count() if n_gpu == -1 else n_gpu
-        device = device or "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
+        device = (
+            device or "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
+        )
         self.index_name = index_name
         self.verbose = verbose
         self.load_from_index = load_from_index
@@ -71,20 +75,17 @@ class ColPaliModel:
         #     token=kwargs.get("hf_token", None) or os.environ.get("HF_TOKEN"),
         # )
 
-
         # if verbose > 0:
         #     print("Loading adapter...")
         #     print("Adapter name: ", self.pretrained_model_name_or_path)
         # self.model.load_adapter(self.pretrained_model_name_or_path)
 
-
         self.model = ColPali.from_pretrained(
             self.pretrained_model_name_or_path,
             torch_dtype=torch.bfloat16,
-            device_map="cuda"
-            if device == "cuda"
-            or (isinstance(device, torch.device) and device.type == "cuda")
-            else None,
+            device_map=(
+                "cuda" if device == "cuda" or (isinstance(device, torch.device) and device.type == "cuda") else None
+            ),
             token=kwargs.get("hf_token", None) or os.environ.get("HF_TOKEN"),
         )
         self.model = self.model.eval()
@@ -93,9 +94,7 @@ class ColPaliModel:
             token=kwargs.get("hf_token", None) or os.environ.get("HF_TOKEN"),
         )
         self.device = device
-        if device != "cuda" and not (
-            isinstance(device, torch.device) and device.type == "cuda"
-        ):
+        if device != "cuda" and not (isinstance(device, torch.device) and device.type == "cuda"):
             self.model = self.model.to(device)
 
         if not load_from_index:
@@ -104,32 +103,22 @@ class ColPaliModel:
         else:
             index_path = Path(index_root) / Path(index_name)
             index_config = srsly.read_gzip_json(index_path / "index_config.json.gz")
-            self.full_document_collection = index_config.get(
-                "full_document_collection", False
-            )
+            self.full_document_collection = index_config.get("full_document_collection", False)
             if self.full_document_collection:
                 collection_path = index_path / "collection"
-                json_files = sorted(
-                    collection_path.glob("*.json.gz"), key=lambda x: int(x.stem.split('.')[0])
-                )
+                json_files = sorted(collection_path.glob("*.json.gz"), key=lambda x: int(x.stem.split(".")[0]))
 
                 for json_file in json_files:
                     loaded_data = srsly.read_gzip_json(json_file)
                     self.collection.update({int(k): v for k, v in loaded_data.items()})
 
                 if self.verbose > 0:
-                    print(
-                        "You are using in-memory collection. This means every image is stored in memory."
-                    )
-                    print(
-                        "You might want to rethink this if you have a large collection!"
-                    )
-                    print(
-                        f"Loaded {len(self.collection)} images from {len(json_files)} JSON files."
-                    )
+                    print("You are using in-memory collection. This means every image is stored in memory.")
+                    print("You might want to rethink this if you have a large collection!")
+                    print(f"Loaded {len(self.collection)} images from {len(json_files)} JSON files.")
 
             embeddings_path = index_path / "embeddings"
-            embedding_files = sorted(embeddings_path.glob("embeddings_*.pt"), key=lambda x: int(x.stem.split('_')[1]))
+            embedding_files = sorted(embeddings_path.glob("embeddings_*.pt"), key=lambda x: int(x.stem.split("_")[1]))
             self.indexed_embeddings = []
             for file in embedding_files:
                 self.indexed_embeddings.extend(torch.load(file))
@@ -183,7 +172,7 @@ class ColPaliModel:
         index_root: str = ".byaldi",
         **kwargs,
     ):
-        index_path = Path(index_root) /  Path(index_path)
+        index_path = Path(index_root) / Path(index_path)
         index_config = srsly.read_gzip_json(index_path / "index_config.json.gz")
         print(index_config)
 
@@ -213,7 +202,7 @@ class ColPaliModel:
         num_embeddings = len(self.indexed_embeddings)
         chunk_size = 500
         for i in range(0, num_embeddings, chunk_size):
-            chunk = self.indexed_embeddings[i:i+chunk_size]
+            chunk = self.indexed_embeddings[i : i + chunk_size]
             torch.save(chunk, embeddings_path / f"embeddings_{i}.pt")
 
         # Save index config
@@ -244,7 +233,7 @@ class ColPaliModel:
 
         if self.verbose > 0:
             print(f"Index exported to {index_path}")
-            
+
     def index(
         self,
         input_path: Union[str, Path],
@@ -254,11 +243,7 @@ class ColPaliModel:
         overwrite: bool = False,
         metadata: Optional[List[Dict[str, Union[str, int]]]] = None,
     ) -> Dict[int, str]:
-        if (
-            self.index_name is not None
-            and (index_name is None or self.index_name == index_name)
-            and not overwrite
-        ):
+        if self.index_name is not None and (index_name is None or self.index_name == index_name) and not overwrite:
             print(
                 f"An index named {self.index_name} is already loaded.",
                 "Use add_to_index() to add to it or search() to query it.",
@@ -270,7 +255,7 @@ class ColPaliModel:
             raise ValueError("index_name must be specified to create a new index.")
         if store_collection_with_index:
             self.full_document_collection = True
-        
+
         index_path = Path(self.index_root) / Path(index_name)
         if index_path.exists():
             if overwrite is False:
@@ -281,7 +266,7 @@ class ColPaliModel:
             else:
                 print(f"overwrite is on. Deleting existing index {index_name} to build a new one.")
                 shutil.rmtree(index_path)
-        
+
         self.index_name = index_name
 
         input_path = Path(input_path)
@@ -314,7 +299,7 @@ class ColPaliModel:
 
         self._export_index()
         return self.doc_ids_to_file_names
-        
+
     def add_to_index(
         self,
         input_item: Union[str, Path, Image.Image, List[Union[str, Path, Image.Image]]],
@@ -331,14 +316,18 @@ class ColPaliModel:
             input_items = list(Path(input_item).iterdir())
         else:
             input_items = [input_item] if not isinstance(input_item, list) else input_item
-    
+
         doc_ids = [doc_id] if isinstance(doc_id, int) else (doc_id if doc_id is not None else None)
 
         # Validate input lengths
         if doc_ids and len(doc_ids) != len(input_items):
-            raise ValueError(f"Number of doc_ids ({len(doc_ids)}) does not match number of input items ({len(input_items)})")
+            raise ValueError(
+                f"Number of doc_ids ({len(doc_ids)}) does not match number of input items ({len(input_items)})"
+            )
         if metadata and len(metadata) != len(input_items):
-            raise ValueError(f"Number of metadata entries ({len(metadata)}) does not match number of input items ({len(input_items)})")
+            raise ValueError(
+                f"Number of metadata entries ({len(metadata)}) does not match number of input items ({len(input_items)})"
+            )
 
         # Process each input item
         for i, item in enumerate(input_items):
@@ -355,7 +344,9 @@ class ColPaliModel:
                 if item_path.is_dir():
                     self._process_directory(item_path, store_collection_with_index, current_doc_id, current_metadata)
                 else:
-                    self._process_and_add_to_index(item_path, store_collection_with_index, current_doc_id, current_metadata)
+                    self._process_and_add_to_index(
+                        item_path, store_collection_with_index, current_doc_id, current_metadata
+                    )
                 self.doc_ids_to_file_names[current_doc_id] = str(item_path)
             elif isinstance(item, Image.Image):
                 self._process_and_add_to_index(item, store_collection_with_index, current_doc_id, current_metadata)
@@ -366,7 +357,13 @@ class ColPaliModel:
         self._export_index()
         return self.doc_ids_to_file_names
 
-    def _process_directory(self, directory: Path, store_collection_with_index: bool, base_doc_id: int, metadata: Optional[Dict[str, Union[str, int]]]):
+    def _process_directory(
+        self,
+        directory: Path,
+        store_collection_with_index: bool,
+        base_doc_id: int,
+        metadata: Optional[Dict[str, Union[str, int]]],
+    ):
         for i, item in enumerate(directory.iterdir()):
             print(f"Indexing file: {item}")
             current_doc_id = base_doc_id + i
@@ -491,9 +488,7 @@ class ColPaliModel:
                     page_num=int(doc_info["page_id"]),
                     score=float(scores[0][embed_id]),
                     metadata=self.doc_id_to_metadata.get(int(doc_info["doc_id"]), {}),
-                    base64=self.collection.get(int(embed_id))
-                    if return_base64_results
-                    else None,
+                    base64=self.collection.get(int(embed_id)) if return_base64_results else None,
                 )
                 query_results.append(result)
 
@@ -506,7 +501,7 @@ class ColPaliModel:
         Compute embeddings for one or more images, PDFs, folders, or image files.
 
         Args:
-            input_data (Union[str, Image.Image, List[Union[str, Image.Image]]]): 
+            input_data (Union[str, Image.Image, List[Union[str, Image.Image]]]):
                 A single image, PDF path, folder path, image file path, or a list of these.
 
         Returns:
@@ -523,13 +518,13 @@ class ColPaliModel:
                 if os.path.isdir(item):
                     # Process folder
                     for file in os.listdir(item):
-                        if file.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')):
+                        if file.lower().endswith((".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".gif")):
                             images.append(Image.open(os.path.join(item, file)))
-                elif item.lower().endswith('.pdf'):
+                elif item.lower().endswith(".pdf"):
                     # Process PDF
                     pdf_images = convert_from_path(item)
                     images.extend(pdf_images)
-                elif item.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')):
+                elif item.lower().endswith((".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".gif")):
                     # Process image file
                     images.append(Image.open(item))
                 else:
@@ -549,7 +544,7 @@ class ColPaliModel:
         Compute embeddings for one or more text queries.
 
         Args:
-            query (Union[str, List[str]]): 
+            query (Union[str, List[str]]):
                 A single text query or a list of text queries.
 
         Returns:
