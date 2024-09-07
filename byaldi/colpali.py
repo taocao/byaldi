@@ -65,21 +65,6 @@ class ColPaliModel:
         self.doc_ids_to_file_names = {}
         self.doc_ids = set()
 
-        # self.model = ColPali.from_pretrained(
-        #     "vidore/colpaligemma-3b-pt-448-base",
-        #     torch_dtype=torch.bfloat16,
-        #     device_map="cuda"
-        #     if device == "cuda"
-        #     or (isinstance(device, torch.device) and device.type == "cuda")
-        #     else None,
-        #     token=kwargs.get("hf_token", None) or os.environ.get("HF_TOKEN"),
-        # )
-
-        # if verbose > 0:
-        #     print("Loading adapter...")
-        #     print("Adapter name: ", self.pretrained_model_name_or_path)
-        # self.model.load_adapter(self.pretrained_model_name_or_path)
-
         self.model = ColPali.from_pretrained(
             self.pretrained_model_name_or_path,
             torch_dtype=torch.bfloat16,
