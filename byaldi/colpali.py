@@ -39,6 +39,9 @@ class ColPaliModel:
         device: Optional[Union[str, torch.device]] = None,
         **kwargs,
     ):
+        if isinstance(pretrained_model_name_or_path, Path):
+            pretrained_model_name_or_path = str(pretrained_model_name_or_path)
+
         if "colpali" not in pretrained_model_name_or_path.lower():
             raise ValueError(
                 "This pre-release version of Byaldi only supports ColPali for now. Incorrect model name specified."
