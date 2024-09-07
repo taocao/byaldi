@@ -12,7 +12,7 @@ def test_single_pdf():
     print("Testing single PDF indexing and retrieval...")
     
     # Initialize the model
-    model = RAGMultiModalModel.from_pretrained("vidore/colpali", device=device)
+    model = RAGMultiModalModel.from_pretrained("vidore/colpali-v1.2", device=device)
     
     # Index a single PDF
     model.index(
