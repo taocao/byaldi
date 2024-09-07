@@ -81,9 +81,13 @@ class ColPaliModel:
             self.full_document_collection = False
             self.highest_doc_id = -1
         else:
-            index_path = Path(index_root) / Path(index_name)
+            if self.index_name is None:
+                raise ValueError("No index name specified. Cannot load from index.")
+
+            index_path = Path(index_root) / Path(self.index_name)
             index_config = srsly.read_gzip_json(index_path / "index_config.json.gz")
             self.full_document_collection = index_config.get("full_document_collection", False)
+
             if self.full_document_collection:
                 collection_path = index_path / "collection"
                 json_files = sorted(collection_path.glob("*.json.gz"), key=lambda x: int(x.stem.split(".")[0]))
