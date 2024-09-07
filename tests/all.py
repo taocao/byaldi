@@ -1,12 +1,18 @@
 import os
 from pathlib import Path
 from byaldi import RAGMultiModalModel
+from byaldi.utils import get_torch_device
+
+
+device = get_torch_device("auto")
+print(f"Using device: {device}")
+
 
 def test_single_pdf():
     print("Testing single PDF indexing and retrieval...")
     
     # Initialize the model
-    model = RAGMultiModalModel.from_pretrained("vidore/colpali")
+    model = RAGMultiModalModel.from_pretrained("vidore/colpali", device=device)
     
     # Index a single PDF
     model.index(
