@@ -1,11 +1,13 @@
-import os
 from pathlib import Path
+
 from byaldi import RAGMultiModalModel
 from byaldi.utils import get_torch_device
 
-
 device = get_torch_device("auto")
 print(f"Using device: {device}")
+
+path_document_1 = Path("docs/attention.pdf")
+path_document_2 = Path("docs/attention_copy.pdf")
 
 
 def test_single_pdf():
@@ -14,6 +16,9 @@ def test_single_pdf():
     # Initialize the model
     model = RAGMultiModalModel.from_pretrained("vidore/colpali-v1.2", device=device)
     
+    if not Path("docs/attention.pdf").is_file():
+        raise FileNotFoundError(f"Please download the PDF file from https://arxiv.org/pdf/1706.03762 and move it to {path_document_1}.")
+
     # Index a single PDF
     model.index(
         input_path="docs/attention.pdf",
@@ -50,6 +55,11 @@ def test_multi_document():
     
     # Initialize the model
     model = RAGMultiModalModel.from_pretrained("vidore/colpali")
+    
+    if not Path("docs/attention.pdf").is_file():
+        raise FileNotFoundError(f"Please download the PDF file from https://arxiv.org/pdf/1706.03762 and move it to {path_document_1}.")
+    if not Path("docs/attention_copy.pdf").is_file():
+        raise FileNotFoundError(f"Please download the PDF file from https://arxiv.org/pdf/1706.03762 and move it to {path_document_2}.")
     
     # Index a directory of documents
     model.index(
